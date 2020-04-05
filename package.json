@@ -1,0 +1,27 @@
+{
+  "name": "bergamot",
+  "version": "0.0.1",
+  "description": "TeaCSS/CommonJS capable simple and blazing fast bundler without AST transforms",
+  "main": "bergamot.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/boomyjee/bergamot.git"
+  },
+  "keywords": [
+    "bundler",
+    "teacss",
+    "commonjs"
+  ],
+  "author": "boomyjee",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/boomyjee/bergamot/issues"
+  },
+  "homepage": "https://github.com/boomyjee/bergamot#readme",
+  "dependencies": {
+    "terser": "^4.6.10"
+  }
+}
