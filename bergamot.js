@@ -1,3 +1,5 @@
+#! /usr/bin/env node
+
 const fs = require("fs");
 const {basename,dirname,relative,normalize,extname,resolve} = require('path');
 

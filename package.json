@@ -1,6 +1,6 @@
 {
   "name": "bergamot",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "TeaCSS/CommonJS capable simple and blazing fast bundler without AST transforms",
   "main": "bergamot.js",
   "scripts": {
@@ -23,5 +23,8 @@
   "homepage": "https://github.com/boomyjee/bergamot#readme",
   "dependencies": {
     "terser": "^4.6.10"
+  },
+  "bin": {
+    "bergamot": "bergamot.js"
   }
 }
