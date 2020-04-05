@@ -2,11 +2,12 @@
 
 const fs = require("fs");
 const {basename,dirname,relative,normalize,extname,resolve} = require('path');
-
+ 
 const is_dir = (path) => fs.existsSync(path) && fs.lstatSync(path).isDirectory()
 const teacss = require("./teacss-core.js");
 
-const [command,entry_point,bundle_path] = process.argv.slice(2);
+const cwd = process.cwd();
+let [command,entry_point,bundle_path] = process.argv.slice(2);
 
 let loadRequire = function (w,root) {
     w.require = function (path) {
@@ -25,10 +26,22 @@ let loadRequire = function (w,root) {
 
 function main() {
     if (command!='watch' && command!='build') return console.log("Pls specify valid command: watch or build");
+
+    let configPath = cwd+"/bergamot.config.js";
+    let config = {};
+
+    if (fs.existsSync(configPath)) {
+        let configs = require(configPath);
+        let config_key = entry_point || Object.keys(configs)[0];
+        console.log("Reading config file with key",config_key);
+        config = configs[config_key];
+        entry_point = config.entry_point;
+        bundle_path = config.bundle_path;
+    }
     if (!entry_point || !bundle_path) return console.log("Pls specify input and output files");
 
     let cache;
-    let bundle_abs = __dirname+"/"+bundle_path;
+    let bundle_abs = cwd+"/"+bundle_path;
     let bundle_dir = dirname(bundle_abs)+"/";
     let bundle_dir_wo_slash = dirname(bundle_abs);
     
@@ -82,7 +95,7 @@ function main() {
         cache = {js:[],tea:[]}
         let startTime = new Date().getTime();
         let entry_type = extname(entry_point).substring(1)=="tea" ? "tea" : "js";
-        process(import2rel(basename(entry_point),__dirname+"/"+entry_point),entry_type);
+        process(import2rel(basename(entry_point),cwd+"/"+entry_point),entry_type);
 
         var build_js = "("+loadRequire.toString()+")(window,document.currentScript.src.replace(/\\/[^/]*?$/,'/'))\n";
         var build_css = "";
@@ -169,7 +182,7 @@ function main() {
         fs.writeFileSync(bundle_abs,build_js);
         
         let css_path = dirname(bundle_path)+"/"+basename(bundle_path,extname(bundle_path))+".css";
-        let css_path_abs = __dirname + "/" + css_path;
+        let css_path_abs = cwd + "/" + css_path;
         console.log("Writing "+css_path);
         fs.writeFileSync(css_path_abs,build_css);
 
@@ -221,15 +234,20 @@ function main() {
                 console.debug("Minify error", terserResult.error);
             } else {
                 js = terserResult.code;
-                /*if (bundler.js_transform) {
-                    console.debug('custom transform',bundler.js_transform);
-                    js = bundler.js_transform(js);
-                }*/
+                if (config.js_transform) {
+                    console.debug('Custom js transform',config.js_transform);
+                    js = config.js_transform(js);
+                }
             }
             return js;
         },(css)=>{
             require("./clean-css.js");
-            return CleanCSS.process(css);
+            css = CleanCSS.process(css);
+            if (config.css_transform) {
+                console.debug('Custom css transform',config.css_transform);
+                css = config.css_transform(css);
+            }
+            return css;
         });
     }
     if (command=='watch') {
