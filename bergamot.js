@@ -25,7 +25,8 @@ let loadRequire = function (w,root) {
 }
 
 function main() {
-    if (command!='watch' && command!='build') return console.log("Pls specify valid command: watch or build");
+    if (command!='watch' && command!='build' && command!='minify') 
+        return console.log("Pls specify valid command: build, watch, minify");
 
     let configPath = cwd+"/bergamot.config.js";
     let config = {};
@@ -226,7 +227,10 @@ function main() {
         watchers = new_watchers;
     }
 
-    if (command=='build') {
+    if (command=="build") {
+        build();
+    }
+    if (command=='minify') {
         build((js)=>{
             let Terser = require("terser");
             var terserResult = Terser.minify(js);

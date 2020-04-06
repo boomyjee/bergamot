@@ -1,6 +1,6 @@
 {
   "name": "bergamot",
-  "version": "0.0.3",
+  "version": "0.1.0",
   "description": "TeaCSS/CommonJS capable simple and blazing fast bundler without AST transforms",
   "main": "bergamot.js",
   "scripts": {
