@@ -148,7 +148,7 @@ function main() {
                 var js = "(function(){var exports={},module={exports:false};";
                 js += "\n"+text;
                 js += "\n" + "return module.exports || exports;})";
-                if (command=="build") {
+                if (command=="minify") {
                     build_js += "define("+path_string(rel_path)+","+js+")\n";
                 } else {
                     js += "\n//# sourceURL=bergamot://bundle/"+rel_path;
