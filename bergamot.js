@@ -1,5 +1,3 @@
-#! /usr/bin/env node
-
 const fs = require("fs");
 const {basename,dirname,relative,normalize,extname,resolve} = require('path');
  
@@ -60,7 +58,10 @@ function main() {
 
         let path = bundle_dir+rel_path;
 
-        if (!fs.existsSync(path) || is_dir(path)) return cache[type][rel_path] = false;
+        if (!fs.existsSync(path) || is_dir(path)) {
+            console.log("Can't include file",path);
+            return cache[type][rel_path] = false;
+        }
 
         let path_ext = extname(rel_path).substring(1);
         let text = fs.readFileSync(path,'utf8');
@@ -93,6 +94,7 @@ function main() {
     };
 
     let build = (js_transform,css_transform) => {
+        teacss.parsed = {};
         cache = {js:[],tea:[]}
         let startTime = new Date().getTime();
         let entry_type = extname(entry_point).substring(1)=="tea" ? "tea" : "js";
@@ -120,21 +122,25 @@ function main() {
                 }
                 cb(text);
             };
-            teacss.process(abs_url,()=>{
-                teacss.getFile = old_getFile;
-                teacss.tea.Style.get(
-                    (css) => build_css += css+"\n",
-                    (text,path) => text.replace(css_pattern,(s,part) => {
-                        if (/^(data:)/.test(part)) return s;
-                        var is_abs = part[0]=="/";
-                        if (!is_abs && !path) return s;
-                        var part_abs = is_abs ? normalize(part) : dirname(path)+"/"+part;
-                        var rel = relative(bundle_dir_wo_slash,part_abs);
-                        return 'url('+rel+')';
-                    })
-                );
-                teacss.tea.Script.get((js) => build_js += js+"\n");
-            });
+            try {
+                teacss.process(abs_url,()=>{
+                    teacss.getFile = old_getFile;
+                    teacss.tea.Style.get(
+                        (css) => build_css += css+"\n",
+                        (text,path) => text.replace(css_pattern,(s,part) => {
+                            if (/^(data:)/.test(part)) return s;
+                            var is_abs = part[0]=="/";
+                            if (!is_abs && !path) return s;
+                            var part_abs = is_abs ? normalize(part) : dirname(path)+"/"+part;
+                            var rel = relative(bundle_dir_wo_slash,part_abs);
+                            return 'url('+rel+')';
+                        })
+                    );
+                    teacss.tea.Script.get((js) => build_js += js+"\n");
+                });
+            } catch (e) {
+                console.debug("teacss error\n",e);
+            }
         };    
 
         let deps = cache;
@@ -206,6 +212,7 @@ function main() {
                 watcher = watchers[path];
                 delete watchers[path];
             } else {
+                if (!fs.existsSync(path)) return;
                 watcher = fs.watch(path,{persistent:true},(e)=>{
                     var rebuild = false;
                     if (e === 'rename' || e === 'unlink') {
