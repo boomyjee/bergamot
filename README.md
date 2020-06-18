@@ -54,9 +54,3 @@ then call
 ```
 bergamot watch other_config_key
 ```
-
-Also you can use bergamot without config file:
-```
-bergamot <command> <entry_point: input.js> <bundle_path: output.js>
-
-``` 

@@ -5,7 +5,8 @@ const is_dir = (path) => fs.existsSync(path) && fs.lstatSync(path).isDirectory()
 const teacss = require("./teacss-core.js");
 
 const cwd = process.cwd();
-let [command,entry_point,bundle_path] = process.argv.slice(2);
+let command = process.argv[2];
+let config_keys = process.argv.slice(3);
 
 let loadRequire = function (w,root) {
     w.require = function (path) {
@@ -27,36 +28,43 @@ function main() {
         return console.log("Pls specify valid command: build, watch, minify");
 
     let configPath = cwd+"/bergamot.config.js";
-    let config = {};
+    let configs = {};
 
     if (fs.existsSync(configPath)) {
-        let configs = require(configPath);
-        let config_key = entry_point || Object.keys(configs)[0];
-        console.log("Reading config file with key",config_key);
-        config = configs[config_key];
-        entry_point = config.entry_point;
-        bundle_path = config.bundle_path;
+        let all_configs = require(configPath);
+        if (config_keys.length==0) config_keys = [Object.keys(all_configs)[0]];
+
+        console.log("Reading config file with keys",config_keys);
+        config_keys.forEach((config_key) => {
+            if (all_configs[config_key]) {
+                let config = all_configs[config_key];
+                if (!config.bundle_path || !config.entry_point) {
+                    return console.log("Please define bundle_path and entry point for config ",config_key);
+                }
+                configs[config_key] = config;
+            } else {
+                return console.log("Config key is absent in config",config_key);
+            }
+        })
     }
-    if (!entry_point || !bundle_path) return console.log("Pls specify input and output files");
 
     let cache;
-    let bundle_abs = cwd+"/"+bundle_path;
-    let bundle_dir = dirname(bundle_abs)+"/";
-    let bundle_dir_wo_slash = dirname(bundle_abs);
-    
+    let config_dir = cwd+"/";
+    let config_dir_wo_slash = cwd;
+
     let import2rel = function(import_uri,import_path) {
         let abs = normalize(dirname(import_path)+"/"+import_uri);
         let ext = extname(abs).substring(1);
         if (is_dir(abs)) abs = resolve(abs,'index'+extname(import_path));
         else if (!ext) abs += extname(import_path);
-        let result = relative(bundle_dir,abs);
+        let result = relative(config_dir,abs);
         return result;
     };
 
     let process = function (rel_path,type) {
         if (cache[type][rel_path]!==undefined) return;
 
-        let path = bundle_dir+rel_path;
+        let path = config_dir+rel_path;
 
         if (!fs.existsSync(path) || is_dir(path)) {
             console.log("Can't include file",path);
@@ -81,117 +89,150 @@ function main() {
                 return 'require('+p1+sub_uri+p3+')';
             });
         }
-        if (path_ext=="css") {
-            pattern = /url\(['"]?([^'"\)]*)['"]?\)/gi;
-            text = text.replace(pattern,(m,p1) => {
-                if (/^(.:\/|data:|http:\/\/|https:\/\/|\/)/.test(p1)) return m;
-                return 'url('+import2rel(p1,path)+')';
-            });
-        }
 
         cache[type][rel_path] = text;
         sub_uris.forEach((sub_uri)=>process(sub_uri,path_ext=='tea' ? 'tea' : type));
     };
 
-    let build = (js_transform,css_transform) => {
+    let build = (do_minify) => {
         teacss.parsed = {};
         cache = {js:[],tea:[]}
+
+        let already_bundled = {};
         let startTime = new Date().getTime();
-        let entry_type = extname(entry_point).substring(1)=="tea" ? "tea" : "js";
-        process(import2rel(basename(entry_point),cwd+"/"+entry_point),entry_type);
 
-        var build_js = "("+loadRequire.toString()+")(window,document.currentScript.src.replace(/\\/[^/]*?$/,'/'))\n";
-        var build_css = "";
+        Object.keys(configs).forEach((config_key,config_key_index) => {
 
-        function path_string(path) {
-            return "'"+path.replace(/\\?("|')/g,'\\$1')+"'";
-        }    
+            let {entry_point,bundle_path,js_transform,css_transform} = configs[config_key];
+            let bundle_dir = cwd+"/"+dirname(bundle_path);
 
-        let css_pattern = /url\(['"]?([^'"\)]*)['"]?\)/g;
+            let entry_type = extname(entry_point).substring(1)=="tea" ? "tea" : "js";
+            process(import2rel(basename(entry_point),cwd+"/"+entry_point),entry_type);
 
-        function processTea(abs_url) {
-            let old_getFile = teacss.getFile;
-            teacss.getFile = function (path,cb) {
-                var rel = relative(bundle_dir_wo_slash,path);
-                var rel_clean = normalize(rel);
-                var text = deps.js[rel_clean]===undefined ? deps.tea[rel_clean] : deps.js[rel_clean];
-                if (text===undefined) {
-                    console.debug("Can't import tea",path,rel); 
-                } else {
-                    teacss.files[path] = text;
+            var build_js = "";
+            var build_css = "";
+
+            if (config_key_index==0) {
+                build_js = "("+loadRequire.toString()+")(window,document.currentScript.src.replace(/\\/[^/]*?$/,'/'))\n";
+            }
+
+            function path_string(path) {
+                return "'"+path.replace(/\\?("|')/g,'\\$1')+"'";
+            }    
+
+            let css_pattern = /url\(['"]?([^'"\)]*)['"]?\)/g;
+            let css_text_relative = (text,path) => text.replace(css_pattern,(s,part) => {
+                if (/^(data:)/.test(part)) return s;
+                var is_abs = part[0]=="/";
+                if (!is_abs && !path) return s;
+                var part_abs = is_abs ? normalize(part) : dirname(path)+"/"+part;
+                var rel = relative(bundle_dir,part_abs);
+                return 'url('+rel+')';
+            })
+
+            function processTea(abs_url) {
+                let old_getFile = teacss.getFile;
+                teacss.getFile = function (path,cb) {
+                    var rel = relative(config_dir_wo_slash,path);
+                    var rel_clean = normalize(rel);
+                    var text = deps.js[rel_clean]===undefined ? deps.tea[rel_clean] : deps.js[rel_clean];
+                    if (text===undefined) {
+                        console.debug("Can't import tea",path,rel); 
+                    } else {
+                        teacss.files[path] = text;
+                    }
+                    cb(text);
+                };
+                try {
+                    teacss.process(abs_url,()=>{
+                        teacss.getFile = old_getFile;
+                        teacss.tea.Style.get(
+                            (css) => build_css += css+"\n",
+                            css_text_relative
+                        );
+                        teacss.tea.Script.get((js) => build_js += js+"\n");
+                    });
+                } catch (e) {
+                    console.debug("teacss error\n",e);
                 }
-                cb(text);
-            };
-            try {
-                teacss.process(abs_url,()=>{
-                    teacss.getFile = old_getFile;
-                    teacss.tea.Style.get(
-                        (css) => build_css += css+"\n",
-                        (text,path) => text.replace(css_pattern,(s,part) => {
-                            if (/^(data:)/.test(part)) return s;
-                            var is_abs = part[0]=="/";
-                            if (!is_abs && !path) return s;
-                            var part_abs = is_abs ? normalize(part) : dirname(path)+"/"+part;
-                            var rel = relative(bundle_dir_wo_slash,part_abs);
-                            return 'url('+rel+')';
-                        })
-                    );
-                    teacss.tea.Script.get((js) => build_js += js+"\n");
-                });
-            } catch (e) {
-                console.debug("teacss error\n",e);
-            }
-        };    
+            };    
 
-        let deps = cache;
-        for (let rel_path in deps.js) {
-            let abs_url = bundle_dir+rel_path;
-            let text = deps.js[rel_path];
-            if (text===false) continue;
+            let deps = cache;
+            for (let rel_path in deps.js) {
+                let abs_url = config_dir+rel_path;
+                let text = deps.js[rel_path];
+                if (text===false) continue;
+                if (already_bundled[abs_url]) continue;
+                already_bundled[abs_url] = true;
 
-            let ext = extname(rel_path).substring(1);
-            if (ext=='js') {
-                var js = "(function(){var exports={},module={exports:false};";
-                js += "\n"+text;
-                js += "\n" + "return module.exports || exports;})";
-                if (command=="minify") {
-                    build_js += "define("+path_string(rel_path)+","+js+")\n";
-                } else {
-                    js += "\n//# sourceURL=bergamot://bundle/"+rel_path;
-                    build_js += "define("+path_string(rel_path)+",eval.call(null,"+JSON.stringify(js)+"))\n";
+                let ext = extname(rel_path).substring(1);
+                if (ext=='js') {
+                    var js = "(function(){var exports={},module={exports:false};";
+                    js += "\n"+text;
+                    js += "\n" + "return module.exports || exports;})";
+                    if (command=="minify") {
+                        build_js += "define("+path_string(rel_path)+","+js+")\n";
+                    } else {
+                        js += "\n//# sourceURL=bergamot://bundle/"+rel_path;
+                        build_js += "define("+path_string(rel_path)+",eval.call(null,"+JSON.stringify(js)+"))\n";
+                    }
                 }
+                if (ext=="css") {
+                    build_js += "define("+path_string(rel_path)+",()=>{})\n";
+                    build_css += css_text_relative(text,abs_url)+"\n";
+                }
+                if (ext=="tea") {
+                    build_js += "define("+path_string(rel_path)+",()=>true)\n";
+                    processTea(abs_url);
+                }            
+            }    
+
+            let entry_ext = extname(entry_point).substring(1);
+            var entry_rel = entry_point;
+
+            if (entry_ext=="js") {
+                build_js += "require("+path_string(entry_rel)+")";
             }
-            if (ext=="css") {
-                build_js += "define("+path_string(rel_path)+",()=>{})\n";
-                build_css += text+"\n";
+            if (entry_ext=="tea") {
+                build_js = "";
+                processTea(config_dir+entry_rel);
             }
-            if (ext=="tea") {
-                build_js += "define("+path_string(rel_path)+",()=>true)\n";
-                processTea(abs_url);
-            }            
-        }    
 
-        let entry_ext = extname(entry_point).substring(1);
-        var entry_rel = Object.keys(deps[entry_ext])[0];
+            if (do_minify) {
+                build_js = ((js)=>{
+                    let Terser = require("terser");
+                    var terserResult = Terser.minify(js);
+                    if (terserResult.error) {
+                        console.debug("Minify error", terserResult.error);
+                    } else {
+                        js = terserResult.code;
+                        if (js_transform) {
+                            console.debug('Custom js transform',js_transform);
+                            js = js_transform(js);
+                        }
+                    }
+                    return js;
+                })(build_js);
+                build_css = ((css)=>{
+                    require("./clean-css.js");
+                    css = CleanCSS.process(css);
+                    if (css_transform) {
+                        console.debug('Custom css transform',css_transform);
+                        css = config.css_transform(css);
+                    }
+                    return css;
+                })(build_css);
+            }
+            
 
-        if (entry_ext=="js") {
-            build_js += "require("+path_string(entry_rel)+")";
-        }
-        if (entry_ext=="tea") {
-            build_js = "";
-            processTea(bundle_dir+entry_rel);
-        }
-
-        if (js_transform) build_js = js_transform(build_js);
-        if (css_transform) build_css = css_transform(build_css);
-
-        console.log("Writing "+bundle_path);
-        fs.writeFileSync(bundle_abs,build_js);
-        
-        let css_path = dirname(bundle_path)+"/"+basename(bundle_path,extname(bundle_path))+".css";
-        let css_path_abs = cwd + "/" + css_path;
-        console.log("Writing "+css_path);
-        fs.writeFileSync(css_path_abs,build_css);
+            console.log("Writing "+bundle_path);
+            fs.writeFileSync(cwd + "/" + bundle_path,build_js);
+            
+            let css_path = dirname(bundle_path)+"/"+basename(bundle_path,extname(bundle_path))+".css";
+            let css_path_abs = cwd + "/" + css_path;
+            console.log("Writing "+css_path);
+            fs.writeFileSync(css_path_abs,build_css);
+        })
 
         let endTime = new Date().getTime();
         console.log("Completed in "+((endTime-startTime)/1000)+"s");
@@ -205,7 +246,7 @@ function main() {
         let deps = [...Object.keys(cache.js),...Object.keys(cache.tea)];
         let new_watchers = {};
         deps.forEach((dep)=>{
-            let path = resolve(bundle_dir,dep);
+            let path = resolve(config_dir,dep);
 
             let watcher;
             if (path in watchers) {
@@ -238,28 +279,7 @@ function main() {
         build();
     }
     if (command=='minify') {
-        build((js)=>{
-            let Terser = require("terser");
-            var terserResult = Terser.minify(js);
-            if (terserResult.error) {
-                console.debug("Minify error", terserResult.error);
-            } else {
-                js = terserResult.code;
-                if (config.js_transform) {
-                    console.debug('Custom js transform',config.js_transform);
-                    js = config.js_transform(js);
-                }
-            }
-            return js;
-        },(css)=>{
-            require("./clean-css.js");
-            css = CleanCSS.process(css);
-            if (config.css_transform) {
-                console.debug('Custom css transform',config.css_transform);
-                css = config.css_transform(css);
-            }
-            return css;
-        });
+        build(true);
     }
     if (command=='watch') {
         watch();
