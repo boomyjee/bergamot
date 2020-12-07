@@ -103,11 +103,16 @@ function main() {
 
         Object.keys(configs).forEach((config_key,config_key_index) => {
 
-            let {entry_point,bundle_path,js_transform,css_transform} = configs[config_key];
-            let bundle_dir = cwd+"/"+dirname(bundle_path);
+            let {root_path,entry_point,bundle_path,js_transform,css_transform} = configs[config_key];
+            root_path = root_path ? root_path : cwd;
+
+            config_dir = root_path+"/";
+            config_dir_wo_slash = root_path;
+
+            let bundle_dir = root_path+"/"+dirname(bundle_path);
 
             let entry_type = extname(entry_point).substring(1)=="tea" ? "tea" : "js";
-            process(import2rel(basename(entry_point),cwd+"/"+entry_point),entry_type);
+            process(import2rel(basename(entry_point),root_path+"/"+entry_point),entry_type);
 
             var build_js = "";
             var build_css = "";
@@ -226,10 +231,10 @@ function main() {
             
 
             console.log("Writing "+bundle_path);
-            fs.writeFileSync(cwd + "/" + bundle_path,build_js);
+            fs.writeFileSync(root_path + "/" + bundle_path,build_js);
             
             let css_path = dirname(bundle_path)+"/"+basename(bundle_path,extname(bundle_path))+".css";
-            let css_path_abs = cwd + "/" + css_path;
+            let css_path_abs = root_path + "/" + css_path;
             console.log("Writing "+css_path);
             fs.writeFileSync(css_path_abs,build_css);
         })

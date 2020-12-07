@@ -54,6 +54,7 @@ You can have multiple bundles in one config file:
 ```javascript
 module.exports = {
     config_key: {
+        root_path: "<path_to_root_folder>",
         entry_point: "<path_to_folder>/index.js",
         bundle_path: "<path_to_bundle>/bundle.min.js", //file name can be changed
         js_transform: (js) => ''// custom js transformation 
