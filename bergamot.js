@@ -26,7 +26,6 @@ let loadRequire = function (w,root) {
 function main() {
     if (command!='watch' && command!='build' && command!='minify') 
         return console.log("Pls specify valid command: build, watch, minify");
-
     let configPath = cwd+"/bergamot.config.js";
     let configs = {};
 
@@ -46,6 +45,8 @@ function main() {
                 return console.log("Config key is absent in config",config_key);
             }
         })
+    } else {
+        return console.log("Can't find config file");
     }
 
     let cache;
@@ -187,7 +188,7 @@ function main() {
                     build_css += css_text_relative(text,abs_url)+"\n";
                 }
                 if (ext=="tea") {
-                    build_js += "define("+path_string(rel_path)+",()=>true)\n";
+                    build_js += "define("+path_string(rel_path)+",()=>{})\n";
                     processTea(abs_url);
                 }            
             }    
@@ -247,7 +248,6 @@ function main() {
     let rebuildTimeout;
     let watch = () => {
         build();
-        console.log("Watching for changes");
         let deps = [...Object.keys(cache.js),...Object.keys(cache.tea)];
         let new_watchers = {};
         deps.forEach((dep)=>{
@@ -278,6 +278,7 @@ function main() {
         });
         for (var path in watchers) watchers[path].close();
         watchers = new_watchers;
+        console.log("Watching for changes");
     }
 
     if (command=="build") {

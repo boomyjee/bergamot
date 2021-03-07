@@ -1,10 +1,10 @@
 {
   "name": "bergamot",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "TeaCSS/CommonJS capable simple and blazing fast bundler without AST transforms",
   "main": "bergamot.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha"
   },
   "repository": {
     "type": "git",
@@ -26,5 +26,8 @@
   },
   "bin": {
     "bergamot": "cli.js"
+  },
+  "devDependencies": {
+    "mocha": "^8.2.1"
   }
 }
